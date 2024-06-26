@@ -7,7 +7,7 @@
 const char* kernelSource = R"(
     __kernel void vectorAdd(__global int* a, __global int* b, __global int* c, int n) {
         int i = get_global_id(0);
-        //printf("id: %d\n", i);
+        printf("id: %d\n", i);
         if (i < n) {
             c[i] = a[i] + b[i];
         }
@@ -111,7 +111,7 @@ int main() {
     // 初始化数据
     for (int i = 0; i < arraySize; i++) {
         a[i] = i;
-        b[i] = i * 2;
+        b[i] = i * 10;
         c[i] = 0;
     }
 
@@ -132,18 +132,11 @@ int main() {
         return -1;
     }
 
-
     // 设置内核参数
     // kernel.setArg(0, a);
     // kernel.setArg(1, b);
     // kernel.setArg(2, c);
     // kernel.setArg(3, arraySize);
-
-    //kernel.setSVMPointers(0, a);
-    //kernel.setSVMPointers(1, b);
-    //kernel.setSVMPointers(2, c);
-    //kernel.setArg(3, arraySize);
-
     clSetKernelArgSVMPointer(kernel(), 0, a);
     clSetKernelArgSVMPointer(kernel(), 1, b);
     clSetKernelArgSVMPointer(kernel(), 2, c);
@@ -162,8 +155,8 @@ int main() {
 
     // 验证结果
     for (int i = 0; i < arraySize; i++) {
-        std::cout << "Expected: " << i+i*2 << ", got: " << c[i] << std::endl;
-        if (c[i] != i + i * 2) {
+        std::cout << "i: " << i << ", Expected: " << i+i*10 << ", got: " << c[i] << std::endl;
+        if (c[i] != i + i * 10) {
             std::cout << "Verification failed at index " << i << std::endl;
             break;
         }
