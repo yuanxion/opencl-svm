@@ -7,9 +7,10 @@
 const char* kernelSource = R"(
     __kernel void vectorAdd(__global int* a, __global int* b, __global int* c, int n) {
         int i = get_global_id(0);
-        printf("id: %d\n", i);
+        printf("id: %d, a,b: %d,%d\n", i, a[i],b[i]);
         if (i < n) {
             c[i] = a[i] + b[i];
+            //printf("id: %d, a,b,c: %d,%d,%d\n", i, a[i],b[i],c[i]);
             //c[i] = 0;
         }
     }
@@ -43,10 +44,12 @@ int main() {
     std::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
     cl::Platform platform = platforms[0];
+    //cl::Platform platform = platforms[1];
 
     std::vector<cl::Device> devices;
     platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
     cl::Device device = devices[0];
+    //cl::Device device = devices[1];
 
     printDeviceInfo(device);
 
@@ -59,21 +62,21 @@ int main() {
 
     bool supported = false;
     // 对应粗粒度缓冲SVM，细粒度缓冲SVM，细粒度系统SVM
-    if ((caps & CL_DEVICE_SVM_COARSE_GRAIN_BUFFER)) {
+    if ((caps & CL_DEVICE_SVM_ATOMICS)) {
         supported = true;
-        std::cout << "Device support coarse-grained buffer SVM." << std::endl;
-    }
-    if ((caps & CL_DEVICE_SVM_FINE_GRAIN_BUFFER)) {
-        supported = true;
-        std::cout << "Device support fine-grained buffer SVM." << std::endl;
+        std::cout << "Device support atomic SVM." << std::endl;
     }
     if ((caps & CL_DEVICE_SVM_FINE_GRAIN_SYSTEM)) {
         supported = true;
         std::cout << "Device support fine-grained system SVM." << std::endl;
     }
-    if ((caps & CL_DEVICE_SVM_ATOMICS)) {
+    if ((caps & CL_DEVICE_SVM_FINE_GRAIN_BUFFER)) {
         supported = true;
-        std::cout << "Device support atomic SVM." << std::endl;
+        std::cout << "Device support fine-grained buffer SVM." << std::endl;
+    }
+    if ((caps & CL_DEVICE_SVM_COARSE_GRAIN_BUFFER)) {
+        supported = true;
+        std::cout << "Device support coarse-grained buffer SVM." << std::endl;
     }
     if (!supported) {
         std::cout << "Device does not support any SVM." << std::endl;
@@ -87,51 +90,35 @@ int main() {
     std::cout << "Kernel created" << std::endl;
 
     // 分配SVM内存
-    const int arraySize = 1024;
+    const int arraySize = 32; //  256; // 1024;
     int* a = (int*)clSVMAlloc(context(), CL_MEM_READ_WRITE, sizeof(int) * arraySize, 0);
     int* b = (int*)clSVMAlloc(context(), CL_MEM_READ_WRITE, sizeof(int) * arraySize, 0);
     int* c = (int*)clSVMAlloc(context(), CL_MEM_READ_WRITE, sizeof(int) * arraySize, 0);
 
-    // // 映射SVM内存:写
-    // cl_int err = clEnqueueSVMMap(queue(), CL_TRUE, CL_MAP_WRITE, a, arraySize, 0, nullptr, nullptr);
-    // if (err != CL_SUCCESS) {
-    //     std::cerr << "Error mapping SVM memory a: " << err << std::endl;
-    //     return -1;
-    // }
-    // err = clEnqueueSVMMap(queue(), CL_TRUE, CL_MAP_WRITE, b, arraySize, 0, nullptr, nullptr);
-    // if (err != CL_SUCCESS) {
-    //     std::cerr << "Error mapping SVM memory b: " << err << std::endl;
-    //     return -1;
-    // }
-    // err = clEnqueueSVMMap(queue(), CL_TRUE, CL_MAP_WRITE, c, arraySize, 0, nullptr, nullptr);
-    // if (err != CL_SUCCESS) {
-    //     std::cerr << "Error mapping SVM memory c: " << err << std::endl;
-    //     return -1;
-    // }
+    // 映射SVM内存:写 no need for iGPU, needed for dGPU
+    cl_int err = clEnqueueSVMMap(queue(), CL_TRUE, CL_MAP_WRITE, a, arraySize, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        std::cerr << "Error mapping SVM memory a: " << err << std::endl;
+        return -1;
+    }
+    err = clEnqueueSVMMap(queue(), CL_TRUE, CL_MAP_WRITE, b, arraySize, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        std::cerr << "Error mapping SVM memory b: " << err << std::endl;
+        return -1;
+    }
+    err = clEnqueueSVMMap(queue(), CL_TRUE, CL_MAP_WRITE, c, arraySize, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        std::cerr << "Error mapping SVM memory c: " << err << std::endl;
+        return -1;
+    }
 
     // 初始化数据
     for (int i = 0; i < arraySize; i++) {
         a[i] = i;
         b[i] = i * 10;
         c[i] = -1;
+        std::cout << "i: " << i << " a,b,c: " << a[i] << "," << b[i] << "," << c[i] << std::endl;
     }
-
-    // // 取消映射SVM内存
-    // err = clEnqueueSVMUnmap(queue(), a, 0, nullptr, nullptr);
-    // if (err != CL_SUCCESS) {
-    //     std::cerr << "Error unmapping SVM memory a: " << err << std::endl;
-    //     return -1;
-    // }
-    // err = clEnqueueSVMUnmap(queue(), b, 0, nullptr, nullptr);
-    // if (err != CL_SUCCESS) {
-    //     std::cerr << "Error unmapping SVM memory b: " << err << std::endl;
-    //     return -1;
-    // }
-    // err = clEnqueueSVMUnmap(queue(), c, 0, nullptr, nullptr);
-    // if (err != CL_SUCCESS) {
-    //     std::cerr << "Error unmapping SVM memory c: " << err << std::endl;
-    //     return -1;
-    // }
 
     // 设置内核参数
     // kernel.setArg(0, a);
@@ -143,32 +130,56 @@ int main() {
     clSetKernelArgSVMPointer(kernel(), 2, c);
     clSetKernelArg(kernel(), 3, sizeof(int), &arraySize);
 
+
+    // 取消映射SVM内存
+    err = clEnqueueSVMUnmap(queue(), a, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        std::cerr << "Error unmapping SVM memory a: " << err << std::endl;
+        return -1;
+    }
+    err = clEnqueueSVMUnmap(queue(), b, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        std::cerr << "Error unmapping SVM memory b: " << err << std::endl;
+        return -1;
+    }
+    err = clEnqueueSVMUnmap(queue(), c, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        std::cerr << "Error unmapping SVM memory c: " << err << std::endl;
+        return -1;
+    }
+
+    // double check
+    for (int i = 0; i < arraySize; i++) {
+        std::cout << "check i: " << i << " a,b,c: " << a[i] << "," << b[i] << "," << c[i] << std::endl;
+    }
+
+
     // 执行内核
     queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(arraySize));
     queue.finish();
 
-    // // 映射SVM内存:读
-    // err = clEnqueueSVMMap(queue(), CL_TRUE, CL_MAP_READ, c, arraySize, 0, nullptr, nullptr);
-    // if (err != CL_SUCCESS) {
-    //     std::cerr << "Error mapping SVM memory c: " << err << std::endl;
-    //     return -1;
-    // }
+    // 映射SVM内存:读
+    err = clEnqueueSVMMap(queue(), CL_TRUE, CL_MAP_READ, c, arraySize, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        std::cerr << "Error mapping SVM memory c: " << err << std::endl;
+        return -1;
+    }
 
     // 验证结果
     for (int i = 0; i < arraySize; i++) {
         std::cout << "i: " << i << ", Expected: " << i+i*10 << ", got: " << c[i] << std::endl;
         if (c[i] != i + i * 10) {
             std::cout << "Verification failed at index " << i << std::endl;
-            break;
+            //break;
         }
     }
 
-    // // 取消映射SVM内存
-    // err = clEnqueueSVMUnmap(queue(), c, 0, nullptr, nullptr);
-    // if (err != CL_SUCCESS) {
-    //     std::cerr << "Error unmapping SVM memory c: " << err << std::endl;
-    //     return -1;
-    // }
+    // 取消映射SVM内存
+    err = clEnqueueSVMUnmap(queue(), c, 0, nullptr, nullptr);
+    if (err != CL_SUCCESS) {
+        std::cerr << "Error unmapping SVM memory c: " << err << std::endl;
+        return -1;
+    }
 
     // 释放SVM内存
     clSVMFree(context(), a);
