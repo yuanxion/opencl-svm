@@ -71,7 +71,7 @@ void printDeviceInfo(cl::Device& device) {
 int main() {
     // 向量大小
     const int dev_num = 2;
-    const int n = 64; // 1024;
+    const int n = 256 * 1024 * 1024; // 64; // 1024;
     std::vector<float> a(n, 1.0f);
     std::vector<float> b(n, 2.0f);
     //std::vector<float> c(n, 0.0f);
@@ -149,14 +149,16 @@ int main() {
         queue0.enqueueReadBuffer(bufferC, CL_TRUE, 0, sizeof(float) * n * dev_num, c.data());
 
         // 打印结果
-        for (int i = 0; i < 10; ++i) {
-            std::cout << "c[" << i << "] = " << c[i] << std::endl;
+        const int N = 10;
+        for (int i = 0; i < N; ++i) {
+            std::cout << "c[" << n-N+i << "] = " << c[n-N+i] << std::endl;
         }
+        std::cout << std::endl;
 
         queue1.enqueueReadBuffer(bufferC, CL_TRUE, 0, sizeof(float) * n * dev_num, c.data());
         // 打印结果
-        for (int i = 0; i < 10; ++i) {
-            std::cout << "c[" << i + n << "] = " << c[i + n] << std::endl;
+        for (int i = 0; i < N; ++i) {
+            std::cout << "c[" << n*2-N + i << "] = " << c[n*2-N + i] << std::endl;
         }
     //} catch (const cl::Error& err) {
     //    std::cerr << "OpenCL error: " << err.what() << " (" << err.err() << ")" << std::endl;
