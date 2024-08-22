@@ -6,3 +6,4 @@ sudo apt install opencl-header ocl-icd-opencl-dev
 # source build.sh test_ocl-2-device.cpp
 source build.sh test_ocl-multi-devices.cpp
 ./app 2>&1 | tee mylog
+source build.sh test_usm_device-multi-devices.cpp
