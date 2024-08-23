@@ -8,5 +8,7 @@ sudo apt install opencl-header ocl-icd-opencl-dev
 # source build.sh test_usm_device-multi-devices.cpp # failed
 # source build.sh test_ocl-multi-contexts.cpp # failed
 # source build.sh test_ocl-re-enter-context.cpp # ok
-source build.sh test_ocl-use-host.cpp # ok
+# source build.sh test_ocl-use-host.cpp # ok
+
+source build.sh test_usm_host-multi-contexts.cpp # failed
 ./app 2>&1 | tee mylog
