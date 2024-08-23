@@ -11,6 +11,7 @@ __kernel void simple_add(__global const float* A, __global const float* B, __glo
     int id = get_global_id(0);
     if (id < size) {
         C[id] = A[id] + B[id];
+        printf("[simple_add: %d] %f + %f = %f\n", id, A[id], B[id], C[id]);
     }
 }
 )";
@@ -57,19 +58,29 @@ int main() {
     cl::CommandQueue queue2(context, device2);
 
     // 分配 USM 设备内存
-    size_t n = 1024; // 假设缓冲区大小为 1024 个 float
+    size_t n = 32; // 1024; // 假设缓冲区大小为 1024 个 float
     cl_int err;
+    // usm_device
     float* usm_device_A = (float*)clDeviceMemAllocINTEL(context(), device1(), nullptr, sizeof(float) * n, 0, &err);
-    float* usm_device_B = (float*)clDeviceMemAllocINTEL(context(), device1(), nullptr, sizeof(float) * n, 0, &err);
-    float* usm_device_C = (float*)clDeviceMemAllocINTEL(context(), device1(), nullptr, sizeof(float) * n, 0, &err);
-    float* usm_device_D = (float*)clDeviceMemAllocINTEL(context(), device2(), nullptr, sizeof(float) * n, 0, &err);
+    printf("[check] clDeviceMemAllocINTEL: %p \n", usm_device_A);
+    // float* usm_device_B = (float*)clDeviceMemAllocINTEL(context(), device1(), nullptr, sizeof(float) * n, 0, &err);
+    // float* usm_device_C = (float*)clDeviceMemAllocINTEL(context(), device1(), nullptr, sizeof(float) * n, 0, &err);
+    // usm_shared
+    // float* usm_device_A = (float*)clSharedMemAllocINTEL(context(), device2(), nullptr, sizeof(float) * n, 0, &err);
+    float* usm_device_B = (float*)clSharedMemAllocINTEL(context(), device2(), nullptr, sizeof(float) * n, 0, &err);
+    printf("[check] clSharedMemAllocINTEL: %p \n", usm_device_B);
+
+    // float* usm_device_C = (float*)clSharedMemAllocINTEL(context(), device1(), nullptr, sizeof(float) * n, 0, &err);
+    cl_mem usm_device_C = (cl_mem)clSharedMemAllocINTEL(context(), device1(), nullptr, sizeof(cl_mem) * n, 0, &err);
+    printf("[check] clSharedMemAllocINTEL cl_mem: %p \n", usm_device_C);
+
     if (err != CL_SUCCESS) {
         std::cerr << "Failed to allocate USM device memory." << std::endl;
         return -1;
     }
 
     // 检查 USM 设备内存是否分配成功
-    if (!usm_device_A || !usm_device_B || !usm_device_C || !usm_device_D) {
+    if (!usm_device_A || !usm_device_B || !usm_device_C) {
         std::cerr << "USM device memory allocation returned nullptr." << std::endl;
         return -1;
     }
@@ -80,12 +91,16 @@ int main() {
     std::vector<float> bufA(n, 1);
     std::vector<float> bufB(n, 2);
     std::vector<float> bufC(n, -1);
-    clEnqueueMemcpyINTEL(queue1(), CL_TRUE, usm_device_A, bufA.data(), sizeof(float) * n, 0, nullptr, nullptr);
-    clEnqueueMemcpyINTEL(queue1(), CL_TRUE, usm_device_B, bufB.data(), sizeof(float) * n, 0, nullptr, nullptr);
+    clEnqueueMemcpyINTEL(queue2(), CL_TRUE, usm_device_A, bufA.data(), sizeof(float) * n, 0, nullptr, nullptr);
+    std::cout << "clEnqueueMemcpyINTEL usm_device_A done" << std::endl;
+    clEnqueueMemcpyINTEL(queue2(), CL_TRUE, usm_device_B, bufB.data(), sizeof(float) * n, 0, nullptr, nullptr);
+    // clEnqueueMemcpyINTEL(queue2(), CL_TRUE, usm_device_B, bufB.data(), sizeof(float) * n, 0, nullptr, nullptr);
+    std::cout << "clEnqueueMemcpyINTEL usm_device_B done" << std::endl;
 
     // 创建并编译 OpenCL 程序
     cl::Program program(context, kernelSource);
     program.build({device1, device2});
+    std::cout << "program build done" << std::endl;
 
     // 创建内核
     cl::Kernel kernel(program, "simple_add");
@@ -100,21 +115,19 @@ int main() {
     cl::NDRange global(n);
 
     // 将内核执行命令排入第一个命令队列
-    queue1.enqueueNDRangeKernel(kernel, cl::NullRange, global, cl::NullRange);
+    queue2.enqueueNDRangeKernel(kernel, cl::NullRange, global, cl::NullRange);
 
     // 使用 cl::CommandQueue::finish 进行同步等待
-    queue1.finish();
-
+    queue2.finish();
     std::cout << "Kernel execution completed on device1." << std::endl;
 
     // 尝试在第二个命令队列上进行操作
     // 注意：这可能会失败，具体取决于平台和设备的支持情况
     try {
-        // queue2.enqueueReadBuffer(cl::Buffer(context, CL_MEM_USE_HOST_PTR, sizeof(float) * n, usm_device_C), CL_TRUE, 0, sizeof(float) * n, usm_device_B);
-        err = clEnqueueMemcpyINTEL(queue1(), CL_TRUE, bufC.data(), usm_device_C, sizeof(float) * n, 0, nullptr, nullptr);
+        // err = clEnqueueMemcpyINTEL(queue2(), CL_TRUE, bufC.data(), usm_device_C, sizeof(float) * n, 0, nullptr, nullptr);
+        err = clEnqueueMemcpyINTEL(queue2(), CL_TRUE, bufC.data(), usm_device_C, sizeof(cl_mem) * n, 0, nullptr, nullptr);
         CHECK_OCL_ERROR_EXIT(err, "clEnqueueMemcpyINTEL failed");
-        queue1.finish();
-
+        queue2.finish();
         std::cout << "Data transfer completed on device2." << std::endl;
 
         // print result
@@ -135,7 +148,6 @@ int main() {
     clMemFreeINTEL(context(), usm_device_A);
     clMemFreeINTEL(context(), usm_device_B);
     clMemFreeINTEL(context(), usm_device_C);
-    clMemFreeINTEL(context(), usm_device_D);
 
     return 0;
 }

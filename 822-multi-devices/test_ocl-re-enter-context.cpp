@@ -16,7 +16,7 @@ const char* kernelSource = R"(
 
         if (gid < n) {
             c[gid] = a[gid] + b[gid];
-            // printf("vectorAdd gid: %d, a,b,c: %f,%f,%f\n", gid, a[gid],b[gid],c[gid]);
+            printf("vectorAdd gid: %d, a,b,c: %f,%f,%f\n", gid, a[gid],b[gid],c[gid]);
         }
     }
 
@@ -29,7 +29,7 @@ const char* kernelSource = R"(
 
         if (gid < n) {
             c[gid] = b[gid] - a[gid];
-            // printf("vectorSub gid: %d, a,b,c: %f,%f,%f\n", gid, a[gid],b[gid],c[gid]);
+            printf("vectorSub gid: %d, a,b,c: %f,%f,%f\n", gid, a[gid],b[gid],c[gid]);
         }
     }
 )";
@@ -71,11 +71,17 @@ void printDeviceInfo(cl::Device& device) {
 int main() {
     // 向量大小
     const int dev_num = 2;
-    const int n = 256 * 1024 * 1024; // 64; // 1024;
+    const int n = 16; // 256 * 1024 * 1024; // 64; // 1024;
+    const int N = 10;
     std::vector<float> a(n, 1.0f);
     std::vector<float> b(n, 2.0f);
     std::vector<float> c(n, 0.0f);
     // std::vector<float> c(n * dev_num, -1.0f);
+    // 打印结果
+    for (int i = 0; i < N; ++i) {
+        std::cout << "c[" << n-N+i << "] = " << c[n-N+i] << std::endl;
+    }
+    std::cout << std::endl;
 
     try {
         // 获取所有平台（例如，NVIDIA、Intel、AMD等）
@@ -127,28 +133,33 @@ int main() {
         // cl::Context context(device);
         // cl::CommandQueue queue(context, device);
 
-        cl::Context context(devices);
-        cl::CommandQueue queue0(context, device0);
-        cl::CommandQueue queue1(context, device1);
+        // cl::Context context(devices);
+        cl::Context context0(device0);
+        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer context0 %p\n", &context0);
+        // cl::CommandQueue queue1(context, device0);
+        cl::CommandQueue queue0(context0, device0);
 
         // // 读取并编译OpenCL kernel
         // std::string kernelSource = readKernelFile("vectorAdd.cl");
         // cl::Program::Sources sources(1, std::make_pair(kernelSource.c_str(), kernelSource.length()));
         // cl::Program program(context, sources);
-        cl::Program program(context, kernelSource);
+        // cl::Program program(context, kernelSource);
+        cl::Program program0(context0, kernelSource);
         // program.build({device});
-        program.build({devices});
+        // program.build({devices});
+        program0.build({device0});
 
-        // 创建缓冲区
-        cl::Buffer bufferA(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * n, a.data());
-        cl::Buffer bufferB(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * n, b.data());
-        cl::Buffer bufferC(context, CL_MEM_WRITE_ONLY, sizeof(float) * n);
+        // 1. 创建缓冲区
+        cl::Buffer bufferA(context0, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * n, a.data());
+        cl::Buffer bufferB(context0, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * n, b.data());
+        cl::Buffer bufferC(context0, CL_MEM_WRITE_ONLY, sizeof(float) * n);
         // cl::Buffer bufferC(context, CL_MEM_WRITE_ONLY, sizeof(float) * n * dev_num);
-        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferA %p\n", bufferA);
-        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferC %p\n", bufferC);
+        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferA %p\n", &bufferA);
+        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferB %p\n", &bufferB);
+        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferC %p\n", &bufferC);
 
         // 设置kernel参数
-        cl::Kernel kernel0(program, "vectorAdd");
+        cl::Kernel kernel0(program0, "vectorAdd");
         kernel0.setArg(0, bufferA);
         kernel0.setArg(1, bufferB);
         kernel0.setArg(2, bufferC);
@@ -162,44 +173,30 @@ int main() {
         queue0.enqueueReadBuffer(bufferC, CL_TRUE, 0, copy_len, c.data());
         // queue0.finish();
         // 打印结果
-        const int N = 10;
         for (int i = 0; i < N; ++i) {
             std::cout << "c[" << n-N+i << "] = " << c[n-N+i] << std::endl;
         }
         std::cout << std::endl;
 
-        // 创建缓冲区
-        cl::Buffer bufferA1(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * n, a.data());
-        cl::Buffer bufferB1(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(float) * n, b.data());
-        cl::Buffer bufferC1(context, CL_MEM_WRITE_ONLY, sizeof(float) * n);
-        cl::Kernel kernel1(program, "vectorSub");
-        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferA %p\n", bufferA1);
-        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferC %p\n", bufferC1);
-        kernel1.setArg(0, bufferA1);
-        kernel1.setArg(1, bufferB1);
-        kernel1.setArg(2, bufferC1);
+        // 2. 创建缓冲区
+        cl::Context context1(device0); // ok
+        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer context1 %p\n", &context1);
+        cl::CommandQueue queue1(context1, device0);
+        cl::Program program1(context1, kernelSource);
+        program1.build({device0});
+        cl::Kernel kernel1(program1, "vectorSub"); // ok, same program0
+
+        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferA %p\n", &bufferA);
+        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferB %p\n", &bufferB);
+        printf("[Check] CL_MEM_COPY_HOST_PTR cl::Buffer bufferC %p\n", &bufferC);
+        kernel1.setArg(0, bufferA);
+        kernel1.setArg(1, bufferB);
+        kernel1.setArg(2, bufferC);
         kernel1.setArg(3, n);
 
         queue1.enqueueNDRangeKernel(kernel1, cl::NullRange, global, cl::NullRange);
         // queue1.enqueueReadBuffer(bufferC, CL_TRUE, 0, sizeof(float) * n * dev_num, c.data());
-        queue1.enqueueReadBuffer(bufferC1, CL_TRUE, 0, copy_len, c.data());
-        // 打印结果
-        for (int i = 0; i < N; ++i) {
-            std::cout << "c[" << n-N+i << "] = " << c[n-N+i] << std::endl;
-        }
-        std::cout << std::endl;
-
-        // check in-place kernel: access 2 buffs on different devices
-        cl::Kernel kernel2(program, "vectorSub");
-        kernel2.setArg(0, bufferC1);
-        kernel2.setArg(1, bufferC);
-        kernel2.setArg(2, bufferC1);
-        kernel2.setArg(3, n);
-        queue1.enqueueNDRangeKernel(kernel2, cl::NullRange, global, cl::NullRange);
-        // queue1.enqueueReadBuffer(bufferC1, CL_TRUE, 0, copy_len, c.data());
-
-        // queue1 kernel + queue0 read is also ok
-        queue0.enqueueReadBuffer(bufferC1, CL_TRUE, 0, copy_len, c.data());
+        queue1.enqueueReadBuffer(bufferC, CL_TRUE, 0, copy_len, c.data());
         // 打印结果
         for (int i = 0; i < N; ++i) {
             std::cout << "c[" << n-N+i << "] = " << c[n-N+i] << std::endl;
