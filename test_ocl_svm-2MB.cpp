@@ -72,8 +72,8 @@ int main() {
         }
 
         // 选择第一个平台
-        //cl::Platform platform = platforms.front(); // Arc 750
-        cl::Platform platform = platforms[1]; // iGPU UHD 770
+        cl::Platform platform = platforms.front(); // Arc 750
+        // cl::Platform platform = platforms[1]; // iGPU UHD 770
 
         // 获取平台上的所有设备（例如，CPU、GPU等）
         std::vector<cl::Device> devices;
@@ -100,7 +100,7 @@ int main() {
         // cl::Buffer bufferC(context, CL_MEM_WRITE_ONLY, sizeof(float) * n);
 
         // 分配SVM内存
-        const int arraySize = 2*1024*1024; // 64; // 32; //  256; // 1024;
+        const int arraySize = n; // 2*1024*1024; // 64; // 32; //  256; // 1024;
         float* a = (float*)clSVMAlloc(context(), CL_MEM_READ_WRITE, sizeof(float) * arraySize, 0);
         float* b = (float*)clSVMAlloc(context(), CL_MEM_READ_WRITE, sizeof(float) * arraySize, 0);
         float* c = (float*)clSVMAlloc(context(), CL_MEM_READ_WRITE, sizeof(float) * arraySize, 0);
